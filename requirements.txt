@@ -4,4 +4,8 @@ avro==1.11.0
 black==22.3.0
 isort==5.10.1
 autoflake==1.4
-pandas == 2.0.3
+pandas==2.2.2
+sqlmodel
+sqlalchemy>=1.4,<1.5
+pydantic>=1.10.0,<2.0.0
+pycountry==24.6.1

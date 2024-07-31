@@ -60,24 +60,18 @@ def task_1_total_new_bookings() -> DAG:
         sqlite_hook = SqliteHook(sqlite_conn_id='sqlite_conn')
     
         with sqlite_hook.get_conn() as connection:
-            # Carregar dados em DataFrames
             df_passengers = convert_to_data_frame(connection, PassengerGold)
             df_bookings = convert_to_data_frame(connection, BookingGold)
 
-            # Filtrar passageiros novos
             df_passengers['date_registered'] = pd.to_datetime(df_passengers['date_registered'])
             new_passengers = df_passengers[df_passengers['date_registered'] >= '2021-01-01']
 
-            # Mesclar DataFrames com base em id_passenger
             merged_df = pd.merge(new_passengers, df_bookings, left_on='id',right_on='id_passenger', how='left')
 
-            # Agrupar por country_code e contar os bookings
             total_bookings = merged_df.groupby('country_code').size().reset_index(name='total_bookings')
 
-            # Salvar os resultados em um CSV
             total_bookings.to_csv('total_new_booking.csv', index=False)
 
-            # Salvar os resultados no banco de dados
             total_bookings.to_sql('total_new_booking', connection, if_exists='replace', index=False)
 
         return {"table_name": "total_new_booking", "row_count": len(total_bookings)}
@@ -97,7 +91,6 @@ def task_1_total_new_bookings() -> DAG:
         connection.close()
         print(df)
 
-    # Task instances
     path_data_passenger = "dags/data/passenger.csv"
     path_data_booking = "dags/data/booking.csv"
     task_ingest_passenger_bronze = ingest_passenger_bronze(path_data_passenger, PassengerBronze)
@@ -112,7 +105,7 @@ def task_1_total_new_bookings() -> DAG:
     task_calculate = calculate_total_new_bookings_by_country()
     task_print = print_data(task_calculate)
 
-    # Setting task dependencies
+
     task_ingest_passenger_bronze >> task_ingest_passenger_bronze_to_silver >> task_ingest_passenger_silver_to_gold
     task_ingest_booking_bronze >> task_ingest_booking_bronze_to_silver >> task_ingest_booking_silver_to_gold
 

@@ -22,7 +22,7 @@ class PassengerGold(PassengerBase, table=True):
 
 class BookingBase(SQLModel):
     id: str = Field(default=None, primary_key=True)
-    id_passenger: str = Field(default=None, foreign_key="passenger_bronze.id")
+    id_passenger: str 
     date_created: Optional[str]
     date_close: Optional[str]
 

@@ -17,7 +17,6 @@ def convert_columns_to_datetime(df, columns) -> pd.DataFrame:
 
 
 def treat_country_code_data(df: pd.DataFrame, country_code_column: str) -> pd.DataFrame:
-
     def is_valid_country_code(code):
         try:
             code = code.upper()
@@ -25,5 +24,5 @@ def treat_country_code_data(df: pd.DataFrame, country_code_column: str) -> pd.Da
         except AttributeError:
             return False
         
-    df[country_code_column] = df[country_code_column].apply(lambda code: code if is_valid_country_code(code) else "OTHER")
+    df[country_code_column] = df[country_code_column].apply(lambda code: str(code).upper() if is_valid_country_code(code) else "OTHER")
     return df

@@ -73,8 +73,10 @@ def task_1_total_new_bookings() -> DAG:
             total_bookings.to_csv('total_new_booking.csv', index=False)
 
             total_bookings.to_sql('total_new_booking', connection, if_exists='replace', index=False)
+            
+            table_metadata = {"table_name": "total_new_booking", "row_count": len(total_bookings)}
 
-        return {"table_name": "total_new_booking", "row_count": len(total_bookings)}
+        return table_metadata
 
     @task(task_id="print_data")
     def print_data(table: Dict[str, any]) -> None:
@@ -84,13 +86,15 @@ def task_1_total_new_bookings() -> DAG:
         :param table: Dict of table metadata
         :returns: None
         """
+        print("#" * 50)
+        print(f"Table Metadata: {table}")
+        print("-" * 50)
         sqlite_hook = SqliteHook(sqlite_conn_id='sqlite_conn')
-        connection = sqlite_hook.get_conn()
-        query = f"SELECT * FROM {table['table_name']}"
-        df = pd.read_sql_query(query, connection)
-        connection.close()
-        print(df)
-
+        with sqlite_hook.get_conn() as connection:
+            query = f"SELECT * FROM {table['table_name']} ORDER BY total_bookings DESC"
+            df = pd.read_sql_query(query, connection)
+        print(f"Data Frame: \n{df.to_markdown()}")
+        print("#" * 50)
     path_data_passenger = "dags/data/passenger.csv"
     path_data_booking = "dags/data/booking.csv"
     task_ingest_passenger_bronze = ingest_passenger_bronze(path_data_passenger, PassengerBronze)

@@ -1,8 +1,36 @@
-from typing import Dict
+import logging
+from typing import Any, Dict, List, Union
 
+import pandas as pd
 import pendulum
 from airflow import DAG
 from airflow.decorators import dag, task
+from airflow.operators.empty import EmptyOperator
+
+from common.task2_funcs import (
+    convert_to_avro,
+    get_largest_key,
+    read_avro_file,
+    read_csv_file_to_df,
+)
+
+logger = logging.getLogger("airflow.task")
+
+AVRO_SCHEMA = {
+    "type": "record",
+    "name": "Transaction",
+    "fields": [
+        {"name": "key", "type": "string"},
+        {"name": "value", "type": "int"},
+        {"name": "date", "type": "string"},
+    ],
+}
+
+
+def _generete_file_path(ds: Union[list, str]) -> dict:
+    if isinstance(ds, str):
+        ds = [ds]
+    return {date: f"dags/data/transactions_{date}.csv" for date in ds}
 
 
 @dag(
@@ -12,23 +40,46 @@ from airflow.decorators import dag, task
     description="Reading data from a CSV file, processing the data and storing it",
 )
 def task_2_stream() -> DAG:
-    """DAG that streams record from an artifical API and stores them in a DB"""
+    """DAG that streams record from an artificial API and stores them in a DB"""
 
     @task
-    def source_data(**op_kwargs) -> Dict[str, any]:
-        """Read file based on DS from list of transactions files convert to binary format and store in tmp file"""
-        raise NotImplementedError
+    def source_data(**op_kwargs) -> Dict[str, Any]:
+        """Read file based on DS from list of transactions convert to binary format, and store in tmp file"""
+
+        ds = op_kwargs["ds"]
+        file_path = _generete_file_path(ds)
+        data_df = read_csv_file_to_df(file_path)
+        avro_path = convert_to_avro(data_df, AVRO_SCHEMA)
+
+        return {"avro_file_path": avro_path}
 
     @task
-    def process_data(table: Dict[str, any]) -> None:
-        """Read tmp binary file and apply a schema on it to validate data.
+    def process_data(data: Dict[str, Any]) -> str:
+        """
+        Read tmp binary file and apply a schema on it to validate data.
         Sum the values by key and then return the key with the 3rd largest result for the given date.
 
         return: 3rd largest result
         """
-        raise NotImplementedError
 
-    process_data(source_data())
+        avro_path = data["avro_file_path"]
+        data_df = read_avro_file(avro_path)
+
+        try:
+            largest_key = get_largest_key(data_df, 3)
+        except ValueError as e:
+            logger.error(f"An error occurred: {e}")
+            largest_key = None
+        return largest_key
+
+    start_process = EmptyOperator(task_id="start_process")
+    # date_file_ds = ["2022-04-26", "2022-04-27", "2022-04-28"]
+    date_file_ds = "2022-04-26"
+    avro_data = source_data(ds=date_file_ds)
+    result = process_data(avro_data)
+    end_process = EmptyOperator(task_id="end_process")
+
+    start_process >> avro_data >> result >> end_process
 
 
 dag = task_2_stream()

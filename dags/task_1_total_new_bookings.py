@@ -1,18 +1,35 @@
+import logging
 from typing import Dict
 
+import pandas as pd
 import pendulum
 from airflow import DAG
 from airflow.decorators import dag, task
+from airflow.operators.empty import EmptyOperator
 from airflow.providers.sqlite.hooks.sqlite import SqliteHook
-import pandas as pd
 from sqlmodel import SQLModel
-from models.models import BookingBronze, BookingSilver, BookingGold, PassengerBronze, PassengerSilver, PassengerGold
-from common.ingestions import convert_to_data_frame, ingest_to_bronze_func, ingest_bronze_to_silver_func, ingest_silver_to_gold_func
+
+from common.task1_funcs import (
+    convert_to_table_to_data_frame,
+    ingest_bronze_to_silver_func,
+    ingest_silver_to_gold_func,
+    ingest_to_bronze_func,
+)
+from models.models import (
+    BookingBronze,
+    BookingGold,
+    BookingSilver,
+    PassengerBronze,
+    PassengerGold,
+    PassengerSilver,
+)
+
+logger = logging.getLogger("airflow.task")
 
 
 @dag(
     schedule_interval="@daily",
-    start_date=pendulum.today('UTC').add(days=-1),
+    start_date=pendulum.today("UTC").add(days=-1),
     catchup=False,
     description="Reading data from a CSV file, processing the data and storing it",
 )
@@ -30,19 +47,25 @@ def task_1_total_new_bookings() -> DAG:
         ingest_to_bronze_func(csv_path, table_model)
 
     @task
-    def ingest_passenger_bronze_to_silver(bronze_table: SQLModel, silver_table: SQLModel):
+    def ingest_passenger_bronze_to_silver(
+        bronze_table: SQLModel, silver_table: SQLModel
+    ):
+        """Ingest passenger data from bronze to silver table"""
         ingest_bronze_to_silver_func(bronze_table, silver_table)
 
     @task
     def ingest_booking_bronze_to_silver(bronze_table: SQLModel, silver_table: SQLModel):
+        """Ingest booking data from bronze to silver table"""
         ingest_bronze_to_silver_func(bronze_table, silver_table)
 
     @task
     def ingest_passenger_silver_to_gold(silver_table: SQLModel, gold_table: SQLModel):
+        """Ingest passenger data from silver to gold table"""
         ingest_silver_to_gold_func(silver_table, gold_table)
 
     @task
     def ingest_booking_silver_to_gold(silver_table: SQLModel, gold_table: SQLModel):
+        """Ingest booking data from silver to gold table"""
         ingest_silver_to_gold_func(silver_table, gold_table)
 
     @task
@@ -57,24 +80,61 @@ def task_1_total_new_bookings() -> DAG:
         :return: Dict of saved table metadata
         """
 
-        sqlite_hook = SqliteHook(sqlite_conn_id='sqlite_conn')
-    
+        sqlite_hook = SqliteHook(sqlite_conn_id="sqlite_conn")
+
         with sqlite_hook.get_conn() as connection:
-            df_passengers = convert_to_data_frame(connection, PassengerGold)
-            df_bookings = convert_to_data_frame(connection, BookingGold)
 
-            df_passengers['date_registered'] = pd.to_datetime(df_passengers['date_registered'])
-            new_passengers = df_passengers[df_passengers['date_registered'] >= '2021-01-01']
+            # SQL query
+            # SELECT
+            #     p.country_code,
+            #     COUNT(DISTINCT b.id) AS total_bookings
+            # FROM
+            #     booking_gold b
+            # LEFT JOIN passenger_gold p
+            #     ON b.id_passenger = p.id
+            # WHERE
+            #     p.date_registered >= '2021-01-01 00:00:00'
+            # GROUP BY
+            #     p.country_code
+            # ORDER BY
+            #     total_bookings DESC
 
-            merged_df = pd.merge(new_passengers, df_bookings, left_on='id',right_on='id_passenger', how='left')
+            df_passengers = convert_to_table_to_data_frame(connection, PassengerGold)
+            df_bookings = convert_to_table_to_data_frame(connection, BookingGold)
 
-            total_bookings = merged_df.groupby('country_code').size().reset_index(name='total_bookings')
+            df_passengers["date_registered"] = pd.to_datetime(
+                df_passengers["date_registered"]
+            )
+            new_passengers = df_passengers[
+                df_passengers["date_registered"] >= "2021-01-01"
+            ]
 
-            total_bookings.to_csv('total_new_booking.csv', index=False)
+            merged_df = pd.merge(
+                new_passengers,
+                df_bookings,
+                left_on="id",
+                right_on="id_passenger",
+                how="left",
+            )
 
-            total_bookings.to_sql('total_new_booking', connection, if_exists='replace', index=False)
-            
-            table_metadata = {"table_name": "total_new_booking", "row_count": len(total_bookings)}
+            total_bookings = (
+                merged_df.groupby("country_code")
+                .size()
+                .reset_index(name="total_bookings")
+                .sort_values(by="total_bookings", ascending=False)
+            )
+
+            total_bookings.to_sql(
+                "total_new_booking", connection, if_exists="replace", index=False
+            )
+
+            table_metadata = {
+                "table_name": "total_new_booking",
+                "column_count": len(total_bookings.columns),
+                "row_count": len(total_bookings),
+                "columns": list(total_bookings.columns),
+                "dtypes": total_bookings.dtypes.apply(lambda x: x.name).to_dict(),
+            }
 
         return table_metadata
 
@@ -84,36 +144,61 @@ def task_1_total_new_bookings() -> DAG:
         Read table data from sqlite based on input dict and print to console.
 
         :param table: Dict of table metadata
-        :returns: None
+        :return: None
         """
-        print("#" * 50)
-        print(f"Table Metadata: {table}")
-        print("-" * 50)
-        sqlite_hook = SqliteHook(sqlite_conn_id='sqlite_conn')
+        sqlite_hook = SqliteHook(sqlite_conn_id="sqlite_conn")
         with sqlite_hook.get_conn() as connection:
             query = f"SELECT * FROM {table['table_name']} ORDER BY total_bookings DESC"
             df = pd.read_sql_query(query, connection)
-        print(f"Data Frame: \n{df.to_markdown()}")
-        print("#" * 50)
+        logger.info(f"\nData Frame: \n{df.to_markdown()}")
+
+    start_process = EmptyOperator(task_id="start_process")
+
     path_data_passenger = "dags/data/passenger.csv"
     path_data_booking = "dags/data/booking.csv"
-    task_ingest_passenger_bronze = ingest_passenger_bronze(path_data_passenger, PassengerBronze)
+    task_ingest_passenger_bronze = ingest_passenger_bronze(
+        path_data_passenger, PassengerBronze
+    )
     task_ingest_booking_bronze = ingest_booking_bronze(path_data_booking, BookingBronze)
 
-    task_ingest_passenger_bronze_to_silver = ingest_passenger_bronze_to_silver(PassengerBronze, PassengerSilver)
-    task_ingest_booking_bronze_to_silver = ingest_booking_bronze_to_silver(BookingBronze, BookingSilver)
+    task_ingest_passenger_bronze_to_silver = ingest_passenger_bronze_to_silver(
+        PassengerBronze, PassengerSilver
+    )
+    task_ingest_booking_bronze_to_silver = ingest_booking_bronze_to_silver(
+        BookingBronze, BookingSilver
+    )
 
-    task_ingest_passenger_silver_to_gold = ingest_passenger_silver_to_gold(PassengerSilver, PassengerGold)
-    task_ingest_booking_silver_to_gold = ingest_booking_silver_to_gold(BookingSilver, BookingGold)
+    task_ingest_passenger_silver_to_gold = ingest_passenger_silver_to_gold(
+        PassengerSilver, PassengerGold
+    )
+    task_ingest_booking_silver_to_gold = ingest_booking_silver_to_gold(
+        BookingSilver, BookingGold
+    )
 
     task_calculate = calculate_total_new_bookings_by_country()
     task_print = print_data(task_calculate)
 
+    end_process = EmptyOperator(task_id="end_process")
 
-    task_ingest_passenger_bronze >> task_ingest_passenger_bronze_to_silver >> task_ingest_passenger_silver_to_gold
-    task_ingest_booking_bronze >> task_ingest_booking_bronze_to_silver >> task_ingest_booking_silver_to_gold
+    (
+        start_process
+        >> task_ingest_passenger_bronze
+        >> task_ingest_passenger_bronze_to_silver
+        >> task_ingest_passenger_silver_to_gold
+    )
+    (
+        start_process
+        >> task_ingest_booking_bronze
+        >> task_ingest_booking_bronze_to_silver
+        >> task_ingest_booking_silver_to_gold
+    )
 
-    [task_ingest_passenger_silver_to_gold, task_ingest_booking_silver_to_gold] >> task_calculate >> task_print
+    (
+        [task_ingest_passenger_silver_to_gold, task_ingest_booking_silver_to_gold]
+        >> task_calculate
+        >> task_print
+        >> end_process
+    )
 
 
 dag = task_1_total_new_bookings()

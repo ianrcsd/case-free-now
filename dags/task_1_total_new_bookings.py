@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Dict
 
 import pandas as pd
@@ -15,6 +16,7 @@ from common.task1_funcs import (
     ingest_silver_to_gold_func,
     ingest_to_bronze_func,
 )
+from config import DATA_PATH
 from models.models import (
     BookingBronze,
     BookingGold,
@@ -154,8 +156,8 @@ def task_1_total_new_bookings() -> DAG:
 
     start_process = EmptyOperator(task_id="start_process")
 
-    path_data_passenger = "dags/data/passenger.csv"
-    path_data_booking = "dags/data/booking.csv"
+    path_data_passenger = os.path.join(DATA_PATH, "passenger.csv")
+    path_data_booking = os.path.join(DATA_PATH, "booking.csv")
     task_ingest_passenger_bronze = ingest_passenger_bronze(
         path_data_passenger, PassengerBronze
     )

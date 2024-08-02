@@ -1,13 +1,7 @@
-import json
-import os
-import tempfile
-from typing import Dict, Union
+from typing import Dict
 
 import pandas as pd
 from airflow.providers.sqlite.hooks.sqlite import SqliteHook
-from avro import schema
-from avro.datafile import DataFileReader, DataFileWriter
-from avro.io import DatumReader, DatumWriter
 from sqlmodel import SQLModel
 
 from common.data_treatment import (

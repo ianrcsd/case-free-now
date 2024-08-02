@@ -4,7 +4,6 @@ import tempfile
 from typing import Dict, Union
 
 import pandas as pd
-from airflow.providers.sqlite.hooks.sqlite import SqliteHook
 from avro import schema
 from avro.datafile import DataFileReader, DataFileWriter
 from avro.io import DatumReader, DatumWriter

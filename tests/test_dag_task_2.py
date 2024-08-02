@@ -1,3 +1,4 @@
+import os
 from unittest.mock import patch
 
 import pandas as pd
@@ -8,6 +9,8 @@ from airflow.utils.state import State
 
 from dags import task_2_stream
 from dags.task_2_stream import _generate_file_path
+
+PATH_DATA = os.getenv("DATA_PATH")
 
 
 @pytest.fixture
@@ -31,13 +34,13 @@ def test_source_data_task(mock_read_csv, dagbag):
 
 def test_generate_file_path():
     result = _generate_file_path("2021-01-01")
-    expected = {"2021-01-01": "dags/data/transactions_2021-01-01.csv"}
+    expected = {"2021-01-01": f"{PATH_DATA}/transactions_2021-01-01.csv"}
     assert result == expected
 
     result = _generate_file_path(["2021-01-01", "2021-01-02"])
     expected = {
-        "2021-01-01": "dags/data/transactions_2021-01-01.csv",
-        "2021-01-02": "dags/data/transactions_2021-01-02.csv",
+        "2021-01-01": f"{PATH_DATA}/transactions_2021-01-01.csv",
+        "2021-01-02": f"{PATH_DATA}/transactions_2021-01-02.csv",
     }
     assert result == expected
 

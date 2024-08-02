@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Any, Dict, List, Union
 
 import pandas as pd
@@ -13,8 +14,10 @@ from common.task2_funcs import (
     read_avro_file,
     read_csv_file_to_df,
 )
+from config import DATA_PATH
 
 logger = logging.getLogger("airflow.task")
+
 
 AVRO_SCHEMA = {
     "type": "record",
@@ -30,7 +33,7 @@ AVRO_SCHEMA = {
 def _generate_file_path(ds: Union[list, str]) -> dict:
     if isinstance(ds, str):
         ds = [ds]
-    return {date: f"dags/data/transactions_{date}.csv" for date in ds}
+    return {date: os.path.join(DATA_PATH, f"transactions_{date}.csv") for date in ds}
 
 
 @dag(

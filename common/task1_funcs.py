@@ -93,7 +93,7 @@ def calculate_total_bookings_by_country(merged_df: pd.DataFrame) -> pd.DataFrame
         )
     except Exception as e:
         total_bookings = None
-        raise RuntimeError(f"Failed to calculate total bookings by country: {e}")
+        raise RuntimeError(f"Failed to calculate total bookings by country")
 
     return total_bookings
 

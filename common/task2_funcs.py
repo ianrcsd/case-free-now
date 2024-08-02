@@ -12,7 +12,12 @@ from common.data_treatment import treat_general_data
 
 
 def read_csv_file_to_df(file_path: Union[str, dict]) -> pd.DataFrame:
-    """Read CSV file and return DataFrame."""
+    """
+    Read CSV file and return DataFrame.
+
+    :param file_path: Path to the CSV file or a dictionary with date and path.
+    :return: DataFrame with the CSV data.
+    """
     if isinstance(file_path, str):
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File {file_path} does not exist.")
@@ -31,7 +36,14 @@ def read_csv_file_to_df(file_path: Union[str, dict]) -> pd.DataFrame:
 
 
 def convert_to_avro(df: pd.DataFrame, avro_schema: json) -> str:
-    """Convert DataFrame to Avro file."""
+    """
+    Convert DataFrame to Avro file.
+
+    :param df: DataFrame to convert.
+    :param avro_schema: Avro schema to use.
+
+    :return: Path to the Avro file.
+    """
     try:
         schema_parse = schema.parse(json.dumps(avro_schema))
         records = df.to_dict(orient="records")
@@ -50,7 +62,11 @@ def convert_to_avro(df: pd.DataFrame, avro_schema: json) -> str:
 
 
 def read_avro_file(avro_path: str) -> pd.DataFrame:
-    """Read Avro file and return as DataFrame."""
+    """Read Avro file and return as DataFrame.
+    :param avro_path: Path to the Avro file.
+
+    :return: DataFrame with the Avro data.
+    """
     try:
         with open(avro_path, "rb") as avro_file:
             reader = DataFileReader(avro_file, DatumReader())
@@ -65,6 +81,10 @@ def read_avro_file(avro_path: str) -> pd.DataFrame:
 def get_largest_key(df: pd.DataFrame, n: int) -> Union[pd.DataFrame, None]:
     """
     Get the n largest key from the DataFrame
+    :param df: DataFrame to get the key from
+    :param n: The position of the key to get
+
+    :return: The key at the n position
     """
     if len(df) == 0:
         raise ValueError("No data available")

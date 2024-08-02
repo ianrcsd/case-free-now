@@ -33,7 +33,12 @@ def treat_general_data(
 
 
 def convert_columns_to_datetime(df: pd.DataFrame, columns: list) -> pd.DataFrame:
-    """Convert columns to datetime, if possible, if not, replace with NaT"""
+    """Convert columns to datetime, if possible, if not, replace with NaT
+    :param df: DataFrame to convert
+    :param columns: List of columns to convert
+
+    :return: DataFrame with the converted columns
+    """
     for column in columns:
         df[column] = pd.to_datetime(
             df[column], format="%Y-%m-%d %H:%M:%S", errors="coerce"
@@ -42,7 +47,12 @@ def convert_columns_to_datetime(df: pd.DataFrame, columns: list) -> pd.DataFrame
 
 
 def treat_country_code_data(df: pd.DataFrame, country_code_column: str) -> pd.DataFrame:
-    """First, convert all country codes to uppercase. Then, check if the country code is valid. If it is not, replace it with 'OTHER'."""
+    """First, convert all country codes to uppercase. Then, check if the country code is valid. If it is not, replace it with 'OTHER'.
+    :param df: DataFrame to treat
+    :param country_code_column: Column name with the country code
+
+    :return: DataFrame with the treated country code column
+    """
 
     def is_valid_country_code(code):
         try:

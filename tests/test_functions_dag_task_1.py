@@ -7,6 +7,7 @@ from sqlmodel import SQLModel
 
 from common.task1_funcs import (
     SqliteHook,
+    calculate_total_bookings_by_country,
     fetch_data_from_table,
     ingest_bronze_to_silver_func,
     ingest_silver_to_gold_func,
@@ -136,4 +137,30 @@ def test_fetch_data_from_table_success(mocker):
 
     assert not result.empty
     assert list(result.columns) == ["column1", "column2"]
-    
+
+
+def test_calculate_total_bookings_by_country():
+    data = {
+        "country_code": ["DE", "DE", "BR", "BR", "BR", "US"],
+        "booking_id": [1, 2, 3, 4, 5, 6],
+    }
+    merged_df = pd.DataFrame(data)
+
+    expected_data = {"country_code": ["BR", "DE", "US"], "total_bookings": [3, 2, 1]}
+    expected_df = pd.DataFrame(expected_data)
+
+    result_df = calculate_total_bookings_by_country(merged_df)
+
+    pd.testing.assert_frame_equal(
+        result_df.reset_index(drop=True), expected_df.reset_index(drop=True)
+    )
+
+
+def test_calculate_total_bookings_by_country_exception():
+    data = {"booking_id": [1, 2, 3, 4, 5, 6]}
+    merged_df = pd.DataFrame(data)
+
+    with pytest.raises(
+        RuntimeError, match="Failed to calculate total bookings by country"
+    ):
+        calculate_total_bookings_by_country(merged_df)

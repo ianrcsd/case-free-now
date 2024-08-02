@@ -31,6 +31,10 @@ AVRO_SCHEMA = {
 
 
 def _generate_file_path(ds: Union[list, str]) -> dict:
+    """Generate file path based on DS from list of transactions
+    :param ds: List of dates
+    :return: Dictionary with date and file path
+    """
     if isinstance(ds, str):
         ds = [ds]
     return {date: os.path.join(DATA_PATH, f"transactions_{date}.csv") for date in ds}

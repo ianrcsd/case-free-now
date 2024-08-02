@@ -27,7 +27,7 @@ AVRO_SCHEMA = {
 }
 
 
-def _generete_file_path(ds: Union[list, str]) -> dict:
+def _generate_file_path(ds: Union[list, str]) -> dict:
     if isinstance(ds, str):
         ds = [ds]
     return {date: f"dags/data/transactions_{date}.csv" for date in ds}
@@ -47,10 +47,19 @@ def task_2_stream() -> DAG:
         """Read file based on DS from list of transactions convert to binary format, and store in tmp file"""
 
         ds = op_kwargs["ds"]
-        file_path = _generete_file_path(ds)
-        data_df = read_csv_file_to_df(file_path)
-        avro_path = convert_to_avro(data_df, AVRO_SCHEMA)
-
+        logger.info(f"Generating file path for date: {ds}")
+        file_path = _generate_file_path(ds)
+        logger.info(f"Reading CSV file from path: {file_path[ds]}")
+        try:
+            data_df = read_csv_file_to_df(file_path)
+        except FileNotFoundError as e:
+            logger.error(f"{e}")
+        logger.info(f"Convert Data to AVRO format")
+        try:
+            avro_path = convert_to_avro(data_df, AVRO_SCHEMA)
+        except RuntimeError as e:
+            logger.error(f"{e}")
+            avro_path = None
         return {"avro_file_path": avro_path}
 
     @task
@@ -63,7 +72,13 @@ def task_2_stream() -> DAG:
         """
 
         avro_path = data["avro_file_path"]
-        data_df = read_avro_file(avro_path)
+        logger.info(f"Reading AVRO file from path: {avro_path}")
+
+        try:
+            data_df = read_avro_file(avro_path)
+        except RuntimeError as e:
+            logger.error(f"Failed to read Avro file from path {avro_path}: {e}")
+            data_df = None
 
         try:
             largest_key = get_largest_key(data_df, 3)

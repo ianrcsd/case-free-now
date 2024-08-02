@@ -15,6 +15,8 @@ from common.data_treatment import treat_general_data
 def read_csv_file_to_df(file_path: Union[str, dict]) -> pd.DataFrame:
     """Read CSV file and return DataFrame."""
     if isinstance(file_path, str):
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File {file_path} does not exist.")
         return pd.read_csv(file_path)
     else:
         if isinstance(file_path, dict):
@@ -31,19 +33,21 @@ def read_csv_file_to_df(file_path: Union[str, dict]) -> pd.DataFrame:
 
 def convert_to_avro(df: pd.DataFrame, avro_schema: json) -> str:
     """Convert DataFrame to Avro file."""
+    try:
+        schema_parse = schema.parse(json.dumps(avro_schema))
+        records = df.to_dict(orient="records")
 
-    schema_parse = schema.parse(json.dumps(avro_schema))
-    records = df.to_dict(orient="records")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".avro") as tmp_file:
+            with open(tmp_file.name, "wb") as avro_file:
+                writer = DataFileWriter(avro_file, DatumWriter(), schema_parse)
+                for record in records:
+                    writer.append(record)
+                writer.close()
+            avro_path = tmp_file.name
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".avro") as tmp_file:
-        with open(tmp_file.name, "wb") as avro_file:
-            writer = DataFileWriter(avro_file, DatumWriter(), schema_parse)
-            for record in records:
-                writer.append(record)
-            writer.close()
-        avro_path = tmp_file.name
-
-    return avro_path
+        return avro_path
+    except Exception as e:
+        raise RuntimeError("Failed to convert DataFrame to Avro: {e}")
 
 
 def read_avro_file(avro_path: str) -> pd.DataFrame:
@@ -56,7 +60,7 @@ def read_avro_file(avro_path: str) -> pd.DataFrame:
         df = pd.DataFrame(records)
         return df
     except Exception as e:
-        raise f"Failed to read Avro file at {avro_path}: {e}"
+        raise RuntimeError(f"Failed to read Avro file at {avro_path}: {e}")
 
 
 def get_largest_key(df: pd.DataFrame, n: int) -> Union[pd.DataFrame, None]:

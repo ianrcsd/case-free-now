@@ -1,3 +1,4 @@
+import os
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -57,9 +58,8 @@ def mock_sqlite_hook(mocker):
 def test_ingest_to_bronze_func(
     mocker, sample_dataframes, data_type, bronze_model, sample_data, tmp_path
 ):
-    # Create CSV
     df = sample_dataframes[sample_data]
-    csv_path = tmp_path / f"sample_{data_type}.csv"
+    csv_path = os.path.join(tmp_path, f"sample_{data_type}.csv")
     df.to_csv(csv_path, index=False)
 
     mock_insert_rows = mocker.patch.object(SqliteHook, "insert_rows", autospec=True)

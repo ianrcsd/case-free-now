@@ -8,6 +8,7 @@ from common.data_treatment import (
     treat_country_code_data,
     treat_general_data,
 )
+from common.general import read_csv_file_to_df
 from hooks.sqlite_hook_custom import CustomSqliteHook
 
 SqliteHook = CustomSqliteHook()
@@ -20,13 +21,15 @@ def ingest_to_bronze_func(csv_path: str, table: Type[SQLModel]) -> None:
     :param csv_path: Path to the CSV file.
     :param table: The SQLModel table class to insert data into.
     """
-    df = pd.read_csv(csv_path, sep=",")
-    df = df.where(pd.notnull(df), None)
-    SqliteHook.insert_rows(
-        table=table.__tablename__,
-        rows=df.values.tolist(),
-        target_fields=df.columns.tolist(),
-    )
+    try:
+        df = read_csv_file_to_df(csv_path)
+        SqliteHook.insert_rows(
+            table=table.__tablename__,
+            rows=df.values.tolist(),
+            target_fields=df.columns.tolist(),
+        )
+    except Exception as e:
+        raise Exception(f"Failed to ingest data to bronze: {e}")
 
 
 def ingest_bronze_to_silver_func(
@@ -72,3 +75,18 @@ def ingest_silver_to_gold_func(
         rows=df.values.tolist(),
         target_fields=df.columns.tolist(),
     )
+
+
+def calculate_total_bookings_by_country(merged_df: pd.DataFrame) -> pd.DataFrame:
+    try:
+        total_bookings = (
+            merged_df.groupby("country_code")
+            .size()
+            .reset_index(name="total_bookings")
+            .sort_values(by="total_bookings", ascending=False)
+        )
+    except Exception as e:
+        total_bookings = None
+        raise RuntimeError(f"Failed to calculate total bookings by country: {e}")
+
+    return total_bookings

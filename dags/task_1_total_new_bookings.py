@@ -11,6 +11,7 @@ from airflow.providers.sqlite.hooks.sqlite import SqliteHook
 from sqlmodel import SQLModel
 
 from common.task1_funcs import (
+    calculate_total_bookings_by_country,
     ingest_bronze_to_silver_func,
     ingest_silver_to_gold_func,
     ingest_to_bronze_func,
@@ -45,10 +46,16 @@ def task_1_total_new_bookings() -> DAG:
 
     @task
     def ingest_passenger_bronze(csv_path: str, table_model: SQLModel):
-        ingest_to_bronze_func(csv_path, table_model)
+        logger.info(f"Ingesting data from {csv_path} to {table_model.__tablename__}")
+        try:
+            ingest_to_bronze_func(csv_path, table_model)
+        except Exception as e:
+            logger.error(f"Failed to ingest data to bronze: {e}")
+            raise
 
     @task
     def ingest_booking_bronze(csv_path: str, table_model: SQLModel):
+        logger.info(f"Ingesting data from {csv_path} to {table_model.__tablename__}")
         ingest_to_bronze_func(csv_path, table_model)
 
     @task
@@ -56,21 +63,25 @@ def task_1_total_new_bookings() -> DAG:
         bronze_table: SQLModel, silver_table: SQLModel
     ):
         """Ingest passenger data from bronze to silver table"""
+        logger.info("Ingesting passenger data from bronze to silver table")
         ingest_bronze_to_silver_func(bronze_table, silver_table)
 
     @task
     def ingest_booking_bronze_to_silver(bronze_table: SQLModel, silver_table: SQLModel):
         """Ingest booking data from bronze to silver table"""
+        logger.info("Ingesting booking data from bronze to silver table")
         ingest_bronze_to_silver_func(bronze_table, silver_table)
 
     @task
     def ingest_passenger_silver_to_gold(silver_table: SQLModel, gold_table: SQLModel):
         """Ingest passenger data from silver to gold table"""
+        logger.info("Ingesting passenger data from silver to gold table")
         ingest_silver_to_gold_func(silver_table, gold_table)
 
     @task
     def ingest_booking_silver_to_gold(silver_table: SQLModel, gold_table: SQLModel):
         """Ingest booking data from silver to gold table"""
+        logger.info("Ingesting booking data from silver to gold table")
         ingest_silver_to_gold_func(silver_table, gold_table)
 
     @task
@@ -98,12 +109,12 @@ def task_1_total_new_bookings() -> DAG:
             right_on="id_passenger",
             how="left",
         )
-        total_bookings = (
-            merged_df.groupby("country_code")
-            .size()
-            .reset_index(name="total_bookings")
-            .sort_values(by="total_bookings", ascending=False)
-        )
+        try:
+            total_bookings = calculate_total_bookings_by_country(merged_df)
+        except RuntimeError as e:
+            logger.error(f"Failed to calculate total bookings by country: {e}")
+            raise
+
         SqliteHook.insert_dataframe_to_sql(total_bookings, "total_new_booking")
 
         table_metadata = {

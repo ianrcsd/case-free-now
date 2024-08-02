@@ -11,6 +11,8 @@ from common.task2_funcs import (
     read_avro_file,
     read_csv_file_to_df,
 )
+from config import DATA_PATH
+from dags.task_2_stream import _generate_file_path, t
 
 
 @pytest.fixture
@@ -103,3 +105,16 @@ def test_get_largest_key_no_data():
     empty_df = pd.DataFrame({"key": [], "value": []})
     with pytest.raises(ValueError, match="No data available"):
         get_largest_key(empty_df, 1)
+
+
+def test_generate_file_path():
+    result = _generate_file_path("2021-01-01")
+    expected = {"2021-01-01": f"{DATA_PATH}/transactions_2021-01-01.csv"}
+    assert result == expected
+
+    result = _generate_file_path(["2021-01-01", "2021-01-02"])
+    expected = {
+        "2021-01-01": f"{DATA_PATH}/transactions_2021-01-01.csv",
+        "2021-01-02": f"{DATA_PATH}/transactions_2021-01-02.csv",
+    }
+    assert result == expected

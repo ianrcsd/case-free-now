@@ -5,7 +5,12 @@ import pandas as pd
 
 
 def read_csv_file_to_df(file_path: Union[str, dict]) -> pd.DataFrame:
-    """Read CSV file and return DataFrame."""
+    """Read CSV file and return DataFrame.
+
+    :param file_path: Path to the CSV file or a dictionary with date and path.
+
+    :return: DataFrame
+    """
     if isinstance(file_path, str):
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File {file_path} does not exist.")

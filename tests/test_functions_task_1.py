@@ -1,83 +1,122 @@
-import json
-import os
-import tempfile
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
-from airflow.models import Connection
-from airflow.providers.sqlite.hooks.sqlite import SqliteHook
-from airflow.settings import Session
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlmodel import Field, SQLModel, create_engine
+from sqlmodel import SQLModel
 
 from common.task1_funcs import (
-    convert_to_avro,
-    convert_to_table_to_data_frame,
+    SqliteHook,
     ingest_bronze_to_silver_func,
     ingest_silver_to_gold_func,
     ingest_to_bronze_func,
-    read_avro_file,
 )
-
-# Sample data for testing
-sample_df = pd.DataFrame(
-    {
-        "id": [1, 2, 3],
-        "name": ["Alice", "Bob", "Charlie"],
-        "country_code": ["US", "GB", "FR"],
-    }
+from models.models import (
+    BookingBronze,
+    BookingGold,
+    BookingSilver,
+    PassengerBronze,
+    PassengerGold,
+    PassengerSilver,
 )
-
-# Sample Avro schema
-sample_avro_schema = {
-    "type": "record",
-    "name": "TestRecord",
-    "fields": [
-        {"name": "id", "type": "int"},
-        {"name": "name", "type": "string"},
-        {"name": "country_code", "type": "string"},
-    ],
-}
-
-
-def test_convert_to_avro():
-    avro_path = convert_to_avro(sample_df, sample_avro_schema)
-    assert os.path.exists(avro_path)
-    os.remove(avro_path)
-
-
-def test_read_avro_file():
-    avro_path = convert_to_avro(sample_df, sample_avro_schema)
-    df = read_avro_file(avro_path)
-    assert not df.empty
-    assert df.shape == (3, 3)
-    os.remove(avro_path)
-
-
-class MockTable(SQLModel, table=True):
-    id: int = Field(primary_key=True)
-    name: str
 
 
 @pytest.fixture
-def connection():
-    # Set up an in-memory SQLite database for testing
-    engine = create_engine("sqlite:///:memory:")
-    SQLModel.metadata.create_all(engine)
-    with engine.connect() as connection:
-        yield connection
+def sample_dataframes():
+    return {
+        "passenger": pd.DataFrame(
+            {
+                "id": ["1", "2"],
+                "date_registered": ["2000-01-06", "2012-02-12"],
+                "country_code": ["BR", "DE"],
+            }
+        ),
+        "booking": pd.DataFrame(
+            {
+                "id": ["1", "2"],
+                "id_passenger": ["1", "2"],
+                "date_created": ["2023-01-01", "2023-01-02"],
+                "date_close": ["2023-01-10", "2023-01-11"],
+            }
+        ),
+    }
 
 
-def test_convert_to_table_to_data_frame(connection):
-    # Perform the function test
-    connection.execute(
-        "INSERT INTO mocktable (id, name) VALUES (1, 'Alice'), (2, 'Bob')"
+@pytest.fixture
+def mock_sqlite_hook(mocker):
+    mocker.patch("common.task1_funcs.SqliteHook", autospec=True)
+    return SqliteHook
+
+
+@pytest.mark.parametrize(
+    "data_type, bronze_model, sample_data",
+    [
+        ("passenger", PassengerBronze, "passenger"),
+        ("booking", BookingBronze, "booking"),
+    ],
+)
+def test_ingest_to_bronze_func(
+    mocker, sample_dataframes, data_type, bronze_model, sample_data, tmp_path
+):
+    # Create CSV
+    df = sample_dataframes[sample_data]
+    csv_path = tmp_path / f"sample_{data_type}.csv"
+    df.to_csv(csv_path, index=False)
+
+    mock_insert_rows = mocker.patch.object(SqliteHook, "insert_rows", autospec=True)
+    ingest_to_bronze_func(csv_path, bronze_model)
+    mock_insert_rows.assert_called_once()
+    assert mock_insert_rows.call_args[1]["table"] == bronze_model.__tablename__
+    assert mock_insert_rows.call_args[1]["target_fields"] == df.columns.tolist()
+
+
+@pytest.mark.parametrize(
+    "bronze_model, silver_model, sample_data",
+    [
+        (PassengerBronze, PassengerSilver, "passenger"),
+        (BookingBronze, BookingSilver, "booking"),
+    ],
+)
+def test_ingest_bronze_to_silver_func(
+    mocker, sample_dataframes, bronze_model, silver_model, sample_data
+):
+    df = sample_dataframes[sample_data]
+    mocker.patch.object(SqliteHook, "fetch_dataframe", return_value=df)
+    mock_insert_rows = mocker.patch.object(SqliteHook, "insert_rows", autospec=True)
+    mocker.patch(
+        "common.task1_funcs.convert_columns_to_datetime",
+        side_effect=lambda df, cols: df,
     )
-    df = convert_to_table_to_data_frame(connection, MockTable)
+    mocker.patch(
+        "common.task1_funcs.treat_country_code_data", side_effect=lambda df, col: df
+    )
+    mocker.patch("common.task1_funcs.treat_general_data", side_effect=lambda df: df)
 
-    # Define the expected DataFrame
-    expected_df = pd.DataFrame({"id": [1, 2], "name": ["Alice", "Bob"]})
+    ingest_bronze_to_silver_func(bronze_model, silver_model)
 
-    # Assert that the result matches the expected DataFrame
-    pd.testing.assert_frame_equal(df, expected_df)
+    mock_insert_rows.assert_called_once()
+    assert mock_insert_rows.call_args[1]["table"] == silver_model.__tablename__
+    assert mock_insert_rows.call_args[1]["target_fields"] == df.columns.tolist()
+    assert mock_insert_rows.call_args[1]["rows"] == df.values.tolist()
+
+
+@pytest.mark.parametrize(
+    "silver_model, gold_model, sample_data",
+    [
+        (PassengerSilver, PassengerGold, "passenger"),
+        (BookingSilver, BookingGold, "booking"),
+    ],
+)
+def test_ingest_silver_to_gold_func(
+    mocker, sample_dataframes, silver_model, gold_model, sample_data
+):
+    df = sample_dataframes[sample_data]
+    mocker.patch.object(SqliteHook, "fetch_dataframe", return_value=df)
+    mock_insert_rows = mocker.patch.object(SqliteHook, "insert_rows", autospec=True)
+    mocker.patch("common.task1_funcs.treat_general_data", side_effect=lambda df: df)
+
+    ingest_silver_to_gold_func(silver_model, gold_model)
+
+    mock_insert_rows.assert_called_once()
+    assert mock_insert_rows.call_args[1]["table"] == gold_model.__tablename__
+    assert mock_insert_rows.call_args[1]["target_fields"] == df.columns.tolist()
+    assert mock_insert_rows.call_args[1]["rows"] == df.values.tolist()

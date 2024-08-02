@@ -12,7 +12,7 @@ from common.task2_funcs import (
     read_csv_file_to_df,
 )
 from config import DATA_PATH
-from dags.task_2_stream import _generate_file_path, t
+from dags.task_2_stream import _generate_file_path
 
 
 @pytest.fixture

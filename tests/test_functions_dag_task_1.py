@@ -7,6 +7,7 @@ from sqlmodel import SQLModel
 
 from common.task1_funcs import (
     SqliteHook,
+    fetch_data_from_table,
     ingest_bronze_to_silver_func,
     ingest_silver_to_gold_func,
     ingest_to_bronze_func,
@@ -120,3 +121,19 @@ def test_ingest_silver_to_gold_func(
     assert mock_insert_rows.call_args[1]["table"] == gold_model.__tablename__
     assert mock_insert_rows.call_args[1]["target_fields"] == df.columns.tolist()
     assert mock_insert_rows.call_args[1]["rows"] == df.values.tolist()
+
+
+def test_fetch_data_from_table_success(mocker):
+    connection_mock = mocker.MagicMock()
+    mocker.patch("common.task1_funcs.SqliteHook.get_conn", return_value=connection_mock)
+    mocker.patch(
+        "pandas.read_sql_query",
+        return_value=pd.DataFrame({"column1": [1, 2], "column2": [3, 4]}),
+    )
+
+    table = {"table_name": "test_table"}
+    result = fetch_data_from_table(table)
+
+    assert not result.empty
+    assert list(result.columns) == ["column1", "column2"]
+    

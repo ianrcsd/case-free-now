@@ -78,6 +78,12 @@ def ingest_silver_to_gold_func(
 
 
 def calculate_total_bookings_by_country(merged_df: pd.DataFrame) -> pd.DataFrame:
+    """ "
+    Calculate the total number of bookings by country.
+
+    :param merged_df: A DataFrame with the merged data from the Passenger and Booking tables.
+    :return: A DataFrame with the total bookings by country
+    """
     try:
         total_bookings = (
             merged_df.groupby("country_code")
@@ -90,3 +96,19 @@ def calculate_total_bookings_by_country(merged_df: pd.DataFrame) -> pd.DataFrame
         raise RuntimeError(f"Failed to calculate total bookings by country: {e}")
 
     return total_bookings
+
+
+def fetch_data_from_table(table: dict) -> pd.DataFrame:
+    """
+    Fetch data from a specified table in the database and return it as a DataFrame.
+
+    :param table: A dictionary containing the table name under the key 'table_name'.
+    :return: A DataFrame with the data from the table.
+    """
+    try:
+        with SqliteHook.get_conn() as connection:
+            query = f"SELECT * FROM {table['table_name']} ORDER BY total_bookings DESC"
+            df = pd.read_sql_query(query, connection)
+        return df
+    except Exception as e:
+        raise Exception(f"An unexpected error occurred when reading table test_tabl")

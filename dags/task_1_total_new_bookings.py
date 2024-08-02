@@ -12,6 +12,7 @@ from sqlmodel import SQLModel
 
 from common.task1_funcs import (
     calculate_total_bookings_by_country,
+    fetch_data_from_table,
     ingest_bronze_to_silver_func,
     ingest_silver_to_gold_func,
     ingest_to_bronze_func,
@@ -51,12 +52,14 @@ def task_1_total_new_bookings() -> DAG:
             ingest_to_bronze_func(csv_path, table_model)
         except Exception as e:
             logger.error(f"Failed to ingest data to bronze: {e}")
-            raise
 
     @task
     def ingest_booking_bronze(csv_path: str, table_model: SQLModel):
         logger.info(f"Ingesting data from {csv_path} to {table_model.__tablename__}")
-        ingest_to_bronze_func(csv_path, table_model)
+        try:
+            ingest_to_bronze_func(csv_path, table_model)
+        except Exception as e:
+            logger.error(f"Failed to ingest data to bronze: {e}")
 
     @task
     def ingest_passenger_bronze_to_silver(
@@ -64,25 +67,37 @@ def task_1_total_new_bookings() -> DAG:
     ):
         """Ingest passenger data from bronze to silver table"""
         logger.info("Ingesting passenger data from bronze to silver table")
-        ingest_bronze_to_silver_func(bronze_table, silver_table)
+        try:
+            ingest_bronze_to_silver_func(bronze_table, silver_table)
+        except Exception as e:
+            logger.error(f"Failed to ingest passenger data from bronze to silver: {e}")
 
     @task
     def ingest_booking_bronze_to_silver(bronze_table: SQLModel, silver_table: SQLModel):
         """Ingest booking data from bronze to silver table"""
         logger.info("Ingesting booking data from bronze to silver table")
-        ingest_bronze_to_silver_func(bronze_table, silver_table)
+        try:
+            ingest_bronze_to_silver_func(bronze_table, silver_table)
+        except Exception as e:
+            logger.error(f"Failed to ingest booking data from bronze to silver: {e}")
 
     @task
     def ingest_passenger_silver_to_gold(silver_table: SQLModel, gold_table: SQLModel):
         """Ingest passenger data from silver to gold table"""
         logger.info("Ingesting passenger data from silver to gold table")
-        ingest_silver_to_gold_func(silver_table, gold_table)
+        try:
+            ingest_silver_to_gold_func(silver_table, gold_table)
+        except Exception as e:
+            logger.error(f"Failed to ingest passenger data from silver to gold: {e}")
 
     @task
     def ingest_booking_silver_to_gold(silver_table: SQLModel, gold_table: SQLModel):
         """Ingest booking data from silver to gold table"""
         logger.info("Ingesting booking data from silver to gold table")
-        ingest_silver_to_gold_func(silver_table, gold_table)
+        try:
+            ingest_silver_to_gold_func(silver_table, gold_table)
+        except Exception as e:
+            logger.error(f"Failed to ingest booking data from silver to gold: {e}")
 
     @task
     def calculate_total_new_bookings_by_country() -> Dict[str, any]:
@@ -135,10 +150,13 @@ def task_1_total_new_bookings() -> DAG:
         :param table: Dict of table metadata
         :return: None
         """
-        with SqliteHook.get_conn() as connection:
-            query = f"SELECT * FROM {table['table_name']} ORDER BY total_bookings DESC"
-            df = pd.read_sql_query(query, connection)
-        logger.info(f"\nData Frame: \n{df.to_markdown()}")
+        logger.info(f"Printing data from table: {table['table_name']}")
+        try:
+            table_df = fetch_data_from_table(table)
+        except Exception as e:
+            logger.error(e)
+
+        logger.info(f"\nData Frame: \n{table_df.to_markdown()}")
 
     start_process = EmptyOperator(task_id="start_process")
 

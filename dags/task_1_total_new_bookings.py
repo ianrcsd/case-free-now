@@ -11,12 +11,12 @@ from airflow.providers.sqlite.hooks.sqlite import SqliteHook
 from sqlmodel import SQLModel
 
 from common.task1_funcs import (
-    convert_to_table_to_data_frame,
     ingest_bronze_to_silver_func,
     ingest_silver_to_gold_func,
     ingest_to_bronze_func,
 )
 from config import DATA_PATH
+from hooks.sqlite_hook_custom import CustomSqliteHook
 from models.models import (
     BookingBronze,
     BookingGold,
@@ -27,6 +27,9 @@ from models.models import (
 )
 
 logger = logging.getLogger("airflow.task")
+
+
+SqliteHook = CustomSqliteHook()
 
 
 @dag(
@@ -82,61 +85,34 @@ def task_1_total_new_bookings() -> DAG:
         :return: Dict of saved table metadata
         """
 
-        sqlite_hook = SqliteHook(sqlite_conn_id="sqlite_conn")
+        df_passengers = SqliteHook.fetch_dataframe(PassengerGold)
+        df_bookings = SqliteHook.fetch_dataframe(BookingGold)
+        df_passengers["date_registered"] = pd.to_datetime(
+            df_passengers["date_registered"]
+        )
+        new_passengers = df_passengers[df_passengers["date_registered"] >= "2021-01-01"]
+        merged_df = pd.merge(
+            new_passengers,
+            df_bookings,
+            left_on="id",
+            right_on="id_passenger",
+            how="left",
+        )
+        total_bookings = (
+            merged_df.groupby("country_code")
+            .size()
+            .reset_index(name="total_bookings")
+            .sort_values(by="total_bookings", ascending=False)
+        )
+        SqliteHook.insert_dataframe_to_sql(total_bookings, "total_new_booking")
 
-        with sqlite_hook.get_conn() as connection:
-
-            # SQL query
-            # SELECT
-            #     p.country_code,
-            #     COUNT(DISTINCT b.id) AS total_bookings
-            # FROM
-            #     booking_gold b
-            # LEFT JOIN passenger_gold p
-            #     ON b.id_passenger = p.id
-            # WHERE
-            #     p.date_registered >= '2021-01-01 00:00:00'
-            # GROUP BY
-            #     p.country_code
-            # ORDER BY
-            #     total_bookings DESC
-
-            df_passengers = convert_to_table_to_data_frame(connection, PassengerGold)
-            df_bookings = convert_to_table_to_data_frame(connection, BookingGold)
-
-            df_passengers["date_registered"] = pd.to_datetime(
-                df_passengers["date_registered"]
-            )
-            new_passengers = df_passengers[
-                df_passengers["date_registered"] >= "2021-01-01"
-            ]
-
-            merged_df = pd.merge(
-                new_passengers,
-                df_bookings,
-                left_on="id",
-                right_on="id_passenger",
-                how="left",
-            )
-
-            total_bookings = (
-                merged_df.groupby("country_code")
-                .size()
-                .reset_index(name="total_bookings")
-                .sort_values(by="total_bookings", ascending=False)
-            )
-
-            total_bookings.to_sql(
-                "total_new_booking", connection, if_exists="replace", index=False
-            )
-
-            table_metadata = {
-                "table_name": "total_new_booking",
-                "column_count": len(total_bookings.columns),
-                "row_count": len(total_bookings),
-                "columns": list(total_bookings.columns),
-                "dtypes": total_bookings.dtypes.apply(lambda x: x.name).to_dict(),
-            }
+        table_metadata = {
+            "table_name": "total_new_booking",
+            "column_count": len(total_bookings.columns),
+            "row_count": len(total_bookings),
+            "columns": list(total_bookings.columns),
+            "dtypes": total_bookings.dtypes.apply(lambda x: x.name).to_dict(),
+        }
 
         return table_metadata
 
@@ -148,8 +124,7 @@ def task_1_total_new_bookings() -> DAG:
         :param table: Dict of table metadata
         :return: None
         """
-        sqlite_hook = SqliteHook(sqlite_conn_id="sqlite_conn")
-        with sqlite_hook.get_conn() as connection:
+        with SqliteHook.get_conn() as connection:
             query = f"SELECT * FROM {table['table_name']} ORDER BY total_bookings DESC"
             df = pd.read_sql_query(query, connection)
         logger.info(f"\nData Frame: \n{df.to_markdown()}")
